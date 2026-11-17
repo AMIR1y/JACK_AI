@@ -1,0 +1,446 @@
+
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#090711">
+<title>JACK AI</title>
+
+<style>
+:root {
+  --bg:#090711;
+  --panel:#151020;
+  --purple:#a855f7;
+  --green:#42f5a1;
+  --yellow:#ffe45c;
+  --red:#ff456b;
+}
+
+* { box-sizing:border-box; }
+
+body {
+  margin:0;
+  background:var(--bg);
+  color:white;
+  font-family:Tahoma,sans-serif;
+}
+
+.app {
+  max-width:600px;
+  min-height:100vh;
+  margin:auto;
+  display:flex;
+  flex-direction:column;
+  background:
+  radial-gradient(circle at 50% 15%,#28143e 0%,transparent 38%),
+  var(--bg);
+}
+
+header {
+  padding:20px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  border-bottom:1px solid #30213f;
+}
+
+.logo {
+  color:var(--purple);
+  font-size:25px;
+  font-weight:bold;
+  letter-spacing:3px;
+}
+
+.online {
+  color:var(--green);
+  font-size:11px;
+}
+
+.profile {
+  text-align:center;
+  padding:20px 10px 10px;
+}
+
+.orb {
+  width:105px;
+  height:105px;
+  margin:auto;
+  border-radius:50%;
+  background:radial-gradient(circle,#e4c5ff,#9333ea 45%,#180b2b 75%);
+  box-shadow:0 0 30px #9b45ed,0 0 65px #541b85;
+  animation:orb 3s infinite alternate;
+}
+
+@keyframes orb {
+  to { transform:scale(1.07); }
+}
+
+#state {
+  color:var(--green);
+  font-size:12px;
+  margin-top:18px;
+}
+
+#messages {
+  flex:1;
+  padding:15px;
+  overflow-y:auto;
+  display:flex;
+  flex-direction:column;
+  gap:13px;
+  min-height:230px;
+}
+
+.message {
+  max-width:88%;
+  padding:13px 15px;
+  border-radius:15px;
+  line-height:1.9;
+  font-size:14px;
+  overflow-wrap:anywhere;
+}
+
+.user {
+  align-self:flex-start;
+  background:#302044;
+  border:1px solid #7541a0;
+}
+
+.jack {
+  align-self:flex-end;
+  background:#171e25;
+  border:1px solid #285c48;
+}
+
+.sender {
+  display:block;
+  font-size:10px;
+  color:#bba0d7;
+  margin-bottom:5px;
+}
+
+.controls {
+  padding:15px;
+  border-top:1px solid #30213f;
+  background:#100c19;
+}
+
+.input-row {
+  display:flex;
+  gap:8px;
+}
+
+input {
+  flex:1;
+  min-width:0;
+  border:1px solid #54346e;
+  border-radius:25px;
+  padding:14px;
+  background:#21182c;
+  color:white;
+  outline:none;
+  font-size:14px;
+}
+
+button {
+  border:1px solid #7543a1;
+  border-radius:18px;
+  background:#28163c;
+  color:white;
+  padding:12px 15px;
+  font-size:14px;
+}
+
+button:active {
+  background:#643394;
+}
+
+.mic {
+  background:#48236c;
+  border-radius:50%;
+  width:52px;
+  height:52px;
+  font-size:20px;
+}
+
+.tools {
+  display:flex;
+  justify-content:center;
+  gap:10px;
+  margin-top:12px;
+  flex-wrap:wrap;
+}
+
+.tools button {
+  font-size:11px;
+  padding:9px 13px;
+}
+
+.footer {
+  color:#777;
+  text-align:center;
+  font-size:10px;
+  padding:12px;
+}
+</style>
+</head>
+
+<body>
+<div class="app">
+
+<header>
+  <div class="logo">JACK AI</div>
+  <div class="online">● CORE ONLINE</div>
+</header>
+
+<section class="profile">
+  <div class="orb"></div>
+  <div id="state">SYSTEM READY</div>
+</section>
+
+<main id="messages"></main>
+
+<section class="controls">
+
+  <div class="input-row">
+    <input id="input" placeholder="به جک دستور بده..." />
+    <button id="send">➤</button>
+    <button class="mic" id="mic">🎙</button>
+  </div>
+
+  <div class="tools">
+    <button id="stop">⏹ توقف صدا</button>
+    <button id="voice">🔊 صدای جک: روشن</button>
+    <button id="clear">🗑 پاک‌کردن گفتگو</button>
+  </div>
+
+</section>
+
+<div class="footer">
+JACK AI · CORE VERSION 1.0
+</div>
+
+</div>
+
+<script>
+const messages = document.getElementById("messages");
+const input = document.getElementById("input");
+const state = document.getElementById("state");
+
+const SpeechRecognition =
+window.SpeechRecognition ||
+window.webkitSpeechRecognition;
+
+let recognition = null;
+let voiceEnabled = true;
+let isListening = false;
+
+const STORAGE_KEY = "jack_ai_conversation_v1";
+
+function setState(text,color="#42f5a1") {
+  state.innerText = text;
+  state.style.color = color;
+}
+
+function addMessage(sender,text,save=true) {
+  const item = document.createElement("div");
+  item.className = "message " + sender;
+
+  const label = document.createElement("span");
+  label.className = "sender";
+  label.textContent = sender === "jack" ? "JACK AI" : "YOU";
+
+  const content = document.createElement("div");
+  content.textContent = text;
+
+  item.appendChild(label);
+  item.appendChild(content);
+  messages.appendChild(item);
+
+  messages.scrollTop = messages.scrollHeight;
+
+  if(save) saveConversation();
+}
+
+function saveConversation() {
+  const data = [...messages.children].map(item => ({
+    sender:item.classList.contains("jack") ? "jack":"user",
+    text:item.querySelector("div").textContent
+  }));
+
+  try {
+    localStorage.setItem(STORAGE_KEY,JSON.stringify(data));
+  } catch(e) {}
+}
+
+function loadConversation() {
+  try {
+    const data = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+
+    data.forEach(item => {
+      addMessage(item.sender,item.text,false);
+    });
+  } catch(e) {}
+}
+
+function speak(text) {
+  if(!voiceEnabled || !("speechSynthesis" in window)) return;
+
+  window.speechSynthesis.cancel();
+
+  const speech = new SpeechSynthesisUtterance(text);
+  speech.lang = "fa-IR";
+  speech.rate = 0.9;
+  speech.pitch = 0.95;
+
+  speech.onstart = () => setState("JACK SPEAKING","#b56cff");
+  speech.onend = () => setState("SYSTEM READY");
+
+  window.speechSynthesis.speak(speech);
+}
+
+function normalize(text) {
+  return text.toLowerCase()
+    .replace(/[؟?!،,.]/g,"")
+    .replace(/ي/g,"ی")
+    .replace(/ك/g,"ک")
+    .trim();
+}
+
+function processCommand(original) {
+  const text = normalize(original);
+
+  if(text.includes("سلام")) {
+    return "سلام! جک آماده دریافت دستورهای تو است.";
+  }
+
+  if(text.includes("اسمت چیه") || text.includes("کی هستی")) {
+    return "من JACK AI هستم؛ دستیار شخصی تو.";
+  }
+
+  if(text.includes("ساعت چنده")) {
+    return "ساعت فعلی " +
+      new Date().toLocaleTimeString("fa-IR") + " است.";
+  }
+
+  if(text.includes("تاریخ امروز")) {
+    return "امروز " +
+      new Date().toLocaleDateString("fa-IR") + " است.";
+  }
+
+  if(text.includes("خوبی")) {
+    return "همه سیستم‌ها آماده‌اند. منتظر دستورات بعدی هستم.";
+  }
+
+  if(text.includes("خاموش شو") || text.includes("خداحافظ")) {
+    return "فعلاً خداحافظ. هر وقت دوباره صدایم کنی آماده‌ام.";
+  }
+
+  if(text.includes("چه کارهایی بلدی")) {
+    return "فعلاً می‌توانم به سلام پاسخ بدهم، ساعت و تاریخ را بگویم و دستورات پایه را تشخیص بدهم. قابلیت‌های بیشتر در مراحل بعد اضافه می‌شوند.";
+  }
+
+  return "متوجه شدم گفتی: " + original +
+    ". این دستور هنوز به موتور هوشمند من متصل نشده است.";
+}
+
+function sendMessage(text) {
+  text = text.trim();
+
+  if(!text) return;
+
+  addMessage("user",text);
+  input.value = "";
+
+  setState("JACK THINKING","#ffe45c");
+
+  const response = processCommand(text);
+
+  addMessage("jack",response);
+  setState("SYSTEM READY");
+
+  speak(response);
+}
+
+document.getElementById("send").onclick = () => {
+  sendMessage(input.value);
+};
+
+input.addEventListener("keydown",event => {
+  if(event.key === "Enter") {
+    sendMessage(input.value);
+  }
+});
+
+document.getElementById("mic").onclick = () => {
+  if(!SpeechRecognition) {
+    addMessage("jack","مرورگر فعلی از تشخیص گفتار پشتیبانی نمی‌کند.");
+    return;
+  }
+
+  if(isListening) return;
+
+  recognition = new SpeechRecognition();
+  recognition.lang = "fa-IR";
+  recognition.continuous = false;
+  recognition.interimResults = false;
+
+  recognition.onstart = () => {
+    isListening = true;
+    setState("LISTENING","#ffe45c");
+  };
+
+  recognition.onresult = event => {
+    const spokenText = event.results[0][0].transcript;
+    sendMessage(spokenText);
+  };
+
+  recognition.onerror = event => {
+    addMessage("jack","خطای دریافت صدا: " + event.error);
+  };
+
+  recognition.onend = () => {
+    isListening = false;
+    setState("SYSTEM READY");
+  };
+
+  try {
+    recognition.start();
+  } catch(e) {
+    isListening = false;
+    setState("SYSTEM READY");
+  }
+};
+
+document.getElementById("stop").onclick = () => {
+  if(recognition && isListening) recognition.stop();
+
+  isListening = false;
+  window.speechSynthesis?.cancel();
+  setState("VOICE STOPPED","#ff456b");
+};
+
+document.getElementById("voice").onclick = event => {
+  voiceEnabled = !voiceEnabled;
+  event.target.textContent = voiceEnabled ?
+    "🔊 صدای جک: روشن":"🔇 صدای جک: خاموش";
+
+  if(!voiceEnabled) window.speechSynthesis?.cancel();
+};
+
+document.getElementById("clear").onclick = () => {
+  messages.innerHTML = "";
+  localStorage.removeItem(STORAGE_KEY);
+  addMessage("jack","گفتگو پاک شد. آماده شروع دوباره هستم.");
+};
+
+loadConversation();
+
+if(messages.children.length === 0) {
+  addMessage("jack","سلام! من جک هستم. آماده‌ام دستوراتت رو دریافت کنم.");
+}
+</script>
+
+</body>
+</html>
